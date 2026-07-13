@@ -52,24 +52,26 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Verify iOS signing configuration
+      - name: Detect iOS signing mode
         shell: bash
         run: |
           if [[ -n "$APPLE_API_ISSUER" && -n "$APPLE_API_KEY" && -n "$APPLE_API_KEY_CONTENT" ]]; then
             echo "Using App Store Connect API key signing."
+            echo "IOS_SIGNING_MODE=automatic" >> "$GITHUB_ENV"
             exit 0
           fi
 
           if [[ -n "$IOS_CERTIFICATE" && -n "$IOS_CERTIFICATE_PASSWORD" && -n "$IOS_MOBILE_PROVISION" ]]; then
             echo "Using manual certificate signing."
+            echo "IOS_SIGNING_MODE=manual" >> "$GITHUB_ENV"
             exit 0
           fi
 
-          echo "Missing iOS signing secrets. Configure either automatic signing (APPLE_API_ISSUER, APPLE_API_KEY, APPLE_API_KEY_CONTENT) or manual signing (IOS_CERTIFICATE, IOS_CERTIFICATE_PASSWORD, IOS_MOBILE_PROVISION)."
-          exit 1
+          echo "No iOS signing secrets detected. Falling back to an unsigned simulator build."
+          echo "IOS_SIGNING_MODE=none" >> "$GITHUB_ENV"
 
       - name: Write App Store Connect key
-        if: ${{ env.APPLE_API_ISSUER != '' && env.APPLE_API_KEY != '' && env.APPLE_API_KEY_CONTENT != '' }}
+        if: ${{ env.IOS_SIGNING_MODE == 'automatic' }}
         shell: bash
         run: |
           key_dir="$RUNNER_TEMP/appstore-connect"
@@ -82,13 +84,17 @@ jobs:
         run: npm run tauri ios init -- --ci
 
       - name: Build signed iOS IPA
+        if: ${{ env.IOS_SIGNING_MODE != 'none' }}
         run: npm run tauri ios build -- --ci --target aarch64 --export-method "$EXPORT_METHOD" --build-number "${{ github.run_number }}"
+
+      - name: Build unsigned iOS simulator app
+        if: ${{ env.IOS_SIGNING_MODE == 'none' }}
+        run: npm run tauri ios build -- --ci --debug --target aarch64-sim --build-number "${{ github.run_number }}"
 
       - name: Upload iOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ios-${{ env.EXPORT_METHOD }}-${{ github.run_number }}
+          name: ios-${{ env.IOS_SIGNING_MODE }}-${{ env.EXPORT_METHOD }}-${{ github.run_number }}
           if-no-files-found: warn
           path: |
-            src-tauri/gen/apple/build/**/*.ipa
-            src-tauri/gen/apple/build/**/*.xcarchive
+            src-tauri/gen/apple/build/**/*
