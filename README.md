@@ -16,7 +16,8 @@ Run the `ios-build` workflow manually from the GitHub Actions tab and choose one
 
 - `debugging`
 - `release-testing`
-- `app-store-connect`
+
+If you are not publishing to the App Store, prefer `debugging`.
 
 ### Required Secrets
 
@@ -41,6 +42,7 @@ Notes:
 - `IOS_CERTIFICATE` and `IOS_MOBILE_PROVISION` must be base64-encoded values.
 - The bundle identifier in [src-tauri/tauri.conf.json](src-tauri/tauri.conf.json) must match the App ID you created in Apple Developer.
 - For GitHub Actions IPA output, the recommended path is automatic signing with `APPLE_API_ISSUER`, `APPLE_API_KEY`, and `APPLE_API_KEY_CONTENT`.
+- Even without App Store publishing, iOS still requires signing for IPA installation on physical devices.
 
 ### Local macOS Commands
 

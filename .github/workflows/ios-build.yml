@@ -7,11 +7,10 @@ on:
         description: Xcode export method for the IPA
         required: true
         type: choice
-        default: release-testing
+        default: debugging
         options:
           - debugging
           - release-testing
-          - app-store-connect
 
 permissions:
   contents: read
