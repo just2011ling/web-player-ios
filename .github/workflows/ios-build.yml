@@ -95,26 +95,27 @@ jobs:
           project_root="src-tauri/gen/apple"
           derived_data_path="$project_root/DerivedData"
 
-          workspace_path=$(find "$project_root" -maxdepth 3 -name "*.xcworkspace" -print -quit)
-          project_path=$(find "$project_root" -maxdepth 3 -name "*.xcodeproj" -print -quit)
+          project_path=$(find "$project_root" -maxdepth 4 -name "*.xcodeproj" ! -path "*/Pods/*" ! -name "Pods.xcodeproj" -print -quit)
 
-          if [[ -n "$workspace_path" ]]; then
-            container_args=( -workspace "$workspace_path" )
-          elif [[ -n "$project_path" ]]; then
-            container_args=( -project "$project_path" )
-          else
-            echo "No Xcode workspace or project found under $project_root"
+          if [[ -z "$project_path" ]]; then
+            echo "No app Xcode project found under $project_root"
             exit 1
           fi
 
-          scheme=$(xcodebuild "${container_args[@]}" -list -json | ruby -rjson -e 'data = JSON.parse(STDIN.read); root = data["workspace"] || data["project"] || {}; schemes = root["schemes"] || []; abort("No Xcode scheme found") if schemes.empty?; puts schemes.first')
+          project_name=$(basename "$project_path" .xcodeproj)
+
+          scheme=$(xcodebuild -project "$project_path" -list -json | ruby -rjson -e 'data = JSON.parse(STDIN.read); root = data["project"] || {}; schemes = (root["schemes"] || []).reject { |name| name.start_with?("Pods-") }; abort("No Xcode scheme found") if schemes.empty?; preferred = ARGV.first; puts(schemes.include?(preferred) ? preferred : schemes.first)' "$project_name")
+
+          echo "Using project: $project_path"
+          echo "Using scheme: $scheme"
 
           xcodebuild \
-            "${container_args[@]}" \
+            -project "$project_path" \
             -scheme "$scheme" \
             -configuration Debug \
-            -destination 'generic/platform=iOS Simulator' \
+            -sdk iphonesimulator \
             -derivedDataPath "$derived_data_path" \
+            ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY= \
