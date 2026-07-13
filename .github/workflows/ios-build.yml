@@ -88,38 +88,16 @@ jobs:
         if: ${{ env.IOS_SIGNING_MODE != 'none' }}
         run: npm run tauri ios build -- --ci --target aarch64 --export-method "$EXPORT_METHOD" --build-number "${{ github.run_number }}"
 
-      - name: Build unsigned iOS simulator app
+      - name: Summarize unsigned iOS mode
         if: ${{ env.IOS_SIGNING_MODE == 'none' }}
         shell: bash
         run: |
-          project_root="src-tauri/gen/apple"
-          derived_data_path="$project_root/DerivedData"
-
-          project_path=$(find "$project_root" -maxdepth 4 -name "*.xcodeproj" ! -path "*/Pods/*" ! -name "Pods.xcodeproj" -print -quit)
-
-          if [[ -z "$project_path" ]]; then
-            echo "No app Xcode project found under $project_root"
-            exit 1
-          fi
-
-          project_name=$(basename "$project_path" .xcodeproj)
-
-          scheme=$(xcodebuild -project "$project_path" -list -json | ruby -rjson -e 'data = JSON.parse(STDIN.read); root = data["project"] || {}; schemes = (root["schemes"] || []).reject { |name| name.start_with?("Pods-") }; abort("No Xcode scheme found") if schemes.empty?; preferred = ARGV.first; puts(schemes.include?(preferred) ? preferred : schemes.first)' "$project_name")
-
-          echo "Using project: $project_path"
-          echo "Using scheme: $scheme"
-
-          xcodebuild \
-            -project "$project_path" \
-            -scheme "$scheme" \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -derivedDataPath "$derived_data_path" \
-            ONLY_ACTIVE_ARCH=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY= \
-            build
+          {
+            echo "## iOS build skipped"
+            echo
+            echo "No Apple signing secrets were provided, so this workflow only initialized the generated iOS project."
+            echo "Configure APPLE_API_* or IOS_* secrets to produce a signed IPA on GitHub Actions."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload iOS artifacts
         uses: actions/upload-artifact@v4
@@ -127,5 +105,5 @@ jobs:
           name: ios-${{ env.IOS_SIGNING_MODE }}-${{ env.EXPORT_METHOD }}-${{ github.run_number }}
           if-no-files-found: warn
           path: |
+            src-tauri/gen/apple/**/*
             src-tauri/gen/apple/build/**/*
-            src-tauri/gen/apple/DerivedData/Build/Products/**/*
