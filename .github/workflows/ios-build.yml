@@ -21,6 +21,7 @@ jobs:
     runs-on: macos-15
     env:
       CI: true
+      HOMEBREW_NO_REQUIRE_TAP_TRUST: 1
       APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
       APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
       APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY_CONTENT }}
@@ -89,7 +90,35 @@ jobs:
 
       - name: Build unsigned iOS simulator app
         if: ${{ env.IOS_SIGNING_MODE == 'none' }}
-        run: npm run tauri ios build -- --ci --debug --target aarch64-sim --build-number "${{ github.run_number }}"
+        shell: bash
+        run: |
+          project_root="src-tauri/gen/apple"
+          derived_data_path="$project_root/DerivedData"
+
+          workspace_path=$(find "$project_root" -maxdepth 3 -name "*.xcworkspace" -print -quit)
+          project_path=$(find "$project_root" -maxdepth 3 -name "*.xcodeproj" -print -quit)
+
+          if [[ -n "$workspace_path" ]]; then
+            container_args=( -workspace "$workspace_path" )
+          elif [[ -n "$project_path" ]]; then
+            container_args=( -project "$project_path" )
+          else
+            echo "No Xcode workspace or project found under $project_root"
+            exit 1
+          fi
+
+          scheme=$(xcodebuild "${container_args[@]}" -list -json | ruby -rjson -e 'data = JSON.parse(STDIN.read); root = data["workspace"] || data["project"] || {}; schemes = root["schemes"] || []; abort("No Xcode scheme found") if schemes.empty?; puts schemes.first')
+
+          xcodebuild \
+            "${container_args[@]}" \
+            -scheme "$scheme" \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$derived_data_path" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY= \
+            build
 
       - name: Upload iOS artifacts
         uses: actions/upload-artifact@v4
@@ -98,3 +127,4 @@ jobs:
           if-no-files-found: warn
           path: |
             src-tauri/gen/apple/build/**/*
+            src-tauri/gen/apple/DerivedData/Build/Products/**/*
