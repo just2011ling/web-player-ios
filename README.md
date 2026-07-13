@@ -20,7 +20,7 @@ Run the `ios-build` workflow manually from the GitHub Actions tab and choose one
 
 ### Required Secrets
 
-You must configure one of the following signing modes before the workflow can succeed.
+You must configure one of the following signing modes before the workflow can succeed. Without these secrets, the workflow will fail fast and no IPA will be produced.
 
 Automatic signing with App Store Connect API key:
 
@@ -40,6 +40,7 @@ Notes:
 - `APPLE_API_KEY_CONTENT` is the full contents of the downloaded `.p8` file.
 - `IOS_CERTIFICATE` and `IOS_MOBILE_PROVISION` must be base64-encoded values.
 - The bundle identifier in [src-tauri/tauri.conf.json](src-tauri/tauri.conf.json) must match the App ID you created in Apple Developer.
+- For GitHub Actions IPA output, the recommended path is automatic signing with `APPLE_API_ISSUER`, `APPLE_API_KEY`, and `APPLE_API_KEY_CONTENT`.
 
 ### Local macOS Commands
 

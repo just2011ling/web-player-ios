@@ -68,8 +68,8 @@ jobs:
             exit 0
           fi
 
-          echo "No iOS signing secrets detected. Falling back to an unsigned simulator build."
-          echo "IOS_SIGNING_MODE=none" >> "$GITHUB_ENV"
+          echo "Missing iOS signing secrets. This workflow only produces signed IPAs. Configure APPLE_API_* or IOS_* secrets first."
+          exit 1
 
       - name: Write App Store Connect key
         if: ${{ env.IOS_SIGNING_MODE == 'automatic' }}
@@ -85,19 +85,7 @@ jobs:
         run: npm run tauri ios init -- --ci
 
       - name: Build signed iOS IPA
-        if: ${{ env.IOS_SIGNING_MODE != 'none' }}
         run: npm run tauri ios build -- --ci --target aarch64 --export-method "$EXPORT_METHOD" --build-number "${{ github.run_number }}"
-
-      - name: Summarize unsigned iOS mode
-        if: ${{ env.IOS_SIGNING_MODE == 'none' }}
-        shell: bash
-        run: |
-          {
-            echo "## iOS build skipped"
-            echo
-            echo "No Apple signing secrets were provided, so this workflow only initialized the generated iOS project."
-            echo "Configure APPLE_API_* or IOS_* secrets to produce a signed IPA on GitHub Actions."
-          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload iOS artifacts
         uses: actions/upload-artifact@v4
@@ -105,5 +93,5 @@ jobs:
           name: ios-${{ env.IOS_SIGNING_MODE }}-${{ env.EXPORT_METHOD }}-${{ github.run_number }}
           if-no-files-found: warn
           path: |
-            src-tauri/gen/apple/**/*
-            src-tauri/gen/apple/build/**/*
+            src-tauri/gen/apple/build/**/*.ipa
+            src-tauri/gen/apple/build/**/*.xcarchive
