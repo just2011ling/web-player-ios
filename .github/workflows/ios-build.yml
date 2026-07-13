@@ -1,0 +1,94 @@
+name: ios-build
+
+on:
+  workflow_dispatch:
+    inputs:
+      export_method:
+        description: Xcode export method for the IPA
+        required: true
+        type: choice
+        default: release-testing
+        options:
+          - debugging
+          - release-testing
+          - app-store-connect
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    runs-on: macos-15
+    env:
+      CI: true
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY_CONTENT }}
+      IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
+      IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+      IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
+      EXPORT_METHOD: ${{ github.event.inputs.export_method || 'release-testing' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
+      - name: Restore Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Verify iOS signing configuration
+        shell: bash
+        run: |
+          if [[ -n "$APPLE_API_ISSUER" && -n "$APPLE_API_KEY" && -n "$APPLE_API_KEY_CONTENT" ]]; then
+            echo "Using App Store Connect API key signing."
+            exit 0
+          fi
+
+          if [[ -n "$IOS_CERTIFICATE" && -n "$IOS_CERTIFICATE_PASSWORD" && -n "$IOS_MOBILE_PROVISION" ]]; then
+            echo "Using manual certificate signing."
+            exit 0
+          fi
+
+          echo "Missing iOS signing secrets. Configure either automatic signing (APPLE_API_ISSUER, APPLE_API_KEY, APPLE_API_KEY_CONTENT) or manual signing (IOS_CERTIFICATE, IOS_CERTIFICATE_PASSWORD, IOS_MOBILE_PROVISION)."
+          exit 1
+
+      - name: Write App Store Connect key
+        if: ${{ env.APPLE_API_ISSUER != '' && env.APPLE_API_KEY != '' && env.APPLE_API_KEY_CONTENT != '' }}
+        shell: bash
+        run: |
+          key_dir="$RUNNER_TEMP/appstore-connect"
+          mkdir -p "$key_dir"
+          key_path="$key_dir/AuthKey_${APPLE_API_KEY}.p8"
+          printf '%s' "$APPLE_API_KEY_CONTENT" > "$key_path"
+          echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+
+      - name: Initialize iOS project
+        run: npm run tauri ios init -- --ci
+
+      - name: Build signed iOS IPA
+        run: npm run tauri ios build -- --ci --target aarch64 --export-method "$EXPORT_METHOD" --build-number "${{ github.run_number }}"
+
+      - name: Upload iOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-${{ env.EXPORT_METHOD }}-${{ github.run_number }}
+          if-no-files-found: warn
+          path: |
+            src-tauri/gen/apple/build/**/*.ipa
+            src-tauri/gen/apple/build/**/*.xcarchive
